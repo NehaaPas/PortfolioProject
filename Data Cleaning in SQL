@@ -1,0 +1,175 @@
+
+/*
+Cleaning Data in SQL Queries
+*/
+
+Select * 
+from NashVille.dbo.NashVilleModel
+where UniqueID = 2045
+-------------------------------------------------------------------------------------------
+--Standardize Date Format
+
+Select SaleDateConverted, Convert(Date, SaleDate)
+from NashVille.dbo.NashVilleModel
+
+Update Nashville.dbo.NashVilleModel
+SET SaleDate = Convert(Date,SaleDate)
+
+Alter Table Nashville.dbo.NashVilleModel
+Add SaleDateConverted Date;
+
+Update Nashville.dbo.NashVilleModel
+SET SaleDateConverted = Convert(Date,SaleDate)
+
+-------------------------------------------------------------------------------------------------------------
+-- Populate Property Address Data
+
+Select *
+From Nashville.dbo.NashVilleModel
+--Where PropertyAddress is null
+order by ParcelID
+
+UPDATE Nashville.dbo.NashVilleModel
+SET PropertyAddress = Null
+Where PropertyAddress = ''
+
+
+Select a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress, ISNULL(a.PropertyAddress, b.PropertyAddress)
+From Nashville.dbo.NashVilleModel a
+Join Nashville.dbo.NashVilleModel b
+  on a.ParcelID = b.ParcelID
+  AND a.[UniqueID] <> b.[UniqueID]
+ Where a.PropertyAddress is null
+
+ Update a
+ SET PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress)
+ From Nashville.dbo.NashVilleModel a
+ Join Nashville.dbo.NashVilleModel b
+  on a.ParcelID = b.ParcelID
+  AND a.[UniqueID] <> b.[UniqueID]
+Where a.PropertyAddress is null
+
+--------------------------------------------------------------------------------------------------------
+-- Breaking out Address into Individual Columns (Address, City, State)
+
+Select PropertyAddress
+From Nashville.dbo.NashVilleModel
+
+SELECT 
+SUBSTRING(PropertyAddress, 1, CHARINDEX(',',PropertyAddress ) -1 ) as Address,
+SUBSTRING(PropertyAddress, CHARINDEX(',',PropertyAddress) +1, LEN(PropertyAddress)) as City 
+From Nashville.dbo.NashVilleModel
+
+
+UPDATE Nashville.dbo.NashVilleModel
+SET PropertyAddress = REPLACE(PropertyAddress,'1808  FOX CHASE DR GOODLETTSVILLE','1808  FOX CHASE DR, GOODLETTSVILLE');
+ 
+
+Alter table Nashville.dbo.NashVilleModel
+ADD PropertySplitAddress nvarchar(255);
+
+Update Nashville.dbo.NashVilleModel
+SET PropertySplitAddress = SUBSTRING(PropertyAddress, 1, CHARINDEX(',',PropertyAddress ) -1 )
+
+Alter table Nashville.dbo.NashVilleModel
+ADD PropertySplitCity nvarchar(255);
+
+Update Nashville.dbo.NashVilleModel
+SET PropertySplitCity = SUBSTRING(PropertyAddress, CHARINDEX(',',PropertyAddress ) +1, LEN(PropertyAddress)) 
+
+Select 
+PARSENAME(REPLACE(OwnerAddress, ',','.') , 3) as address
+,PARSENAME(REPLACE(OwnerAddress, ',','.') , 2) as City 
+,PARSENAME(REPLACE(OwnerAddress, ',','.') , 1) as State 
+From Nashville.dbo.NashVilleModel
+
+
+Alter table Nashville.dbo.NashVilleModel
+ADD OwnerSplitAddress nvarchar(255);
+
+Update Nashville.dbo.NashVilleModel
+SET  OwnerSplitAddress = PARSENAME(REPLACE(OwnerAddress, ',','.') , 3) 
+
+Alter table Nashville.dbo.NashVilleModel
+ADD OwnerSplitCity nvarchar(255);
+
+Update Nashville.dbo.NashVilleModel
+SET OwnerSplitCity = PARSENAME(REPLACE(OwnerAddress, ',','.') , 2) 
+
+Alter table Nashville.dbo.NashVilleModel
+ADD OwnerSplitState nvarchar(255);
+
+Update Nashville.dbo.NashVilleModel
+SET OwnerSplitState = PARSENAME(REPLACE(OwnerAddress, ',','.') , 1) 
+
+
+
+Select *
+From Nashville.dbo.NashVilleModel
+
+---------------------------------------------------------------------------------------------------------------------
+-- Change Y and N to Yes and No in "Sold as Vacant" Field
+
+
+Select Distinct(SoldAsVacant), COUNT(SoldAsVacant)
+From Nashville.dbo.NashVilleModel 
+Group by SoldAsVacant
+Order by 2
+
+
+UPDATE Nashville.dbo.NashVilleModel
+SET SoldAsVacant = REPLACE(SoldAsVacant, 'N', 'No')
+
+UPDATE Nashville.dbo.NashVilleModel
+SET SoldAsVacant = REPLACE(SoldAsVacant, 'Y', 'Yes')
+
+Select SoldAsVacant,
+Case
+  When SoldAsVacant = 'Yes' then 'Yes'
+  ELSE SoldAsVacant 
+end
+From Nashville.dbo.NashVilleModel 
+
+
+UPDATE Nashville.dbo.NashVilleModel 
+SET SoldAsVacant = Case 
+      When SoldAsVacant = 'Y' then 'Yes'
+	  When SoldAsVacant = 'N' then 'No'
+      ELSE SoldAsVacant 
+    end
+
+
+---------------------------------------------------------------------------------------------------------------
+--Remove Duplicates Using CTE
+
+
+WITH RowNumCTE AS(
+Select *,
+	ROW_NUMBER() OVER (
+	PARTITION BY ParcelID,
+				 PropertyAddress,
+				 SalePrice,
+				 SaleDate,
+				 LegalReference
+				 ORDER BY
+				    UniqueID
+					) row_num
+
+From Nashville.dbo.NashVilleModel
+--order by ParcelID
+)
+
+Select *
+From RowNumCTE
+Where row_num > 1
+--Order by PropertyAddress
+
+----------------------------------------------------------------------------------------------------------------
+-- Delete Unused Columns
+
+Select *
+From Nashville.dbo.NashVilleModel
+Order by len(UniqueID), UniqueID
+
+ALTER Table Nashville.dbo.NashVilleModel
+Drop Column OwnerAddress, TaxDistrict, PropertyAddress, SaleDate
